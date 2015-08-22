@@ -1,0 +1,36 @@
+=== System requirements
+OS: Microsoft Windows XP or newer (with Internet Explorer 6 or newer)
+CPU: Pentium 4 or greater
+=== Features
+Support 2 languages: English, Vietnamese (can add more)
+User-friendly interface & very simple
+Songs shown in groups (Latin based only)
+Search for a song (Latin based only)
+Auto-Scroll
+Add/remove/modify song
+Styling the lyrics & chords
+Change tone ability
+Chord viewer
+Add/Edit chords
+Export database (for backup or sharing)
+Printing
+Update/Import database online/offline
+=== Paths
+Database (Default): %ProgramFiles%\[JT] Songbooks\SongbooksDB.mdb
+About (Default): %ProgramFiles%\[JT] Songbooks\About.jpg
+ChordMap file (Default): %ProgramFiles%\[JT] Songbooks\ChordMap.ini
+Help file (Default): %ProgramFiles%\[JT] Songbooks\Help.txt
+License file (Default): %ProgramFiles%\[JT] Songbooks\license.txt
+Configuration file (Default): %ProgramFiles%\[JT] Songbooks\Settings.ini
+Language file (Default): %ProgramFiles%\[JT] Songbooks\Languages\Vietnamese.ini
+=== Shortcut
+Open this help file: <F1>
+Chord Viewer: <Ctrl> + <`>
+Auto-Bracket (send to clipboard): <Ctrl> + <Shift> + <c>
+=== Changelog
+v2.0.0 (00-00-2014)
+First release of [JT] Songbooks Version 2 with many new functions and bug fixed
+v1.0.1 (08-07-2013)
+Fix some bugs
+v1.0.0 (29-05-2013)
+First release of [JT] Songbooks
