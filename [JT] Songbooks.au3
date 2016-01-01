@@ -40,6 +40,7 @@ AutoItSetOption('GUIResizeMode', $GUI_DOCKALL)
 #REGION ### GLOBAL VARIABLES ###
 Global CONST $AppVersion = '2.0.1'
 Global CONST $JdbUrl = 'https://google.com/SongbooksDB.mdb'
+Global CONST $SourceCodeUrl = 'https://github.com/o0johntam0o/JT-Songbooks/'
 Global CONST $AboutFile = @ScriptDir & '\About.jpg'
 Global CONST $HelpFile = @ScriptDir & '\Help.txt'
 Global CONST $ConfigFile = @ScriptDir & '\Settings.ini'
@@ -50,6 +51,7 @@ Global $CurrentScreen = IniRead($ConfigFile, 'Common', 'Screen', 1024)
 Global $CurrentSongInfo[4] = ['', '', '', '']
 Global $tmpData[4] = ['', '', '', '']
 Global $tmpString = ''
+Global $errorText = ''
 Global $tmpInt = 0
 Global $CurrentTreeItem = ''
 Global $CurrentSearch = ''
@@ -362,18 +364,7 @@ While 1
 			EndIf
 			
 		Case $ButtonNew
-			If ($UpdateMode == 0 Or JT_MessageBox($FormMain, 'Confirm', "The song haven't saved yet. Do you want to leave it?") == 6) Then
-				$UpdateMode = 2
-				GUICtrlSetStyle($InputTitle, $GUI_SS_DEFAULT_INPUT)
-				GUICtrlSetState($InputTitle, $GUI_FOCUS)
-				GUICtrlSetStyle($InputAuthor, $GUI_SS_DEFAULT_INPUT)
-				GUICtrlSetStyle($InputCadence, $GUI_SS_DEFAULT_INPUT)
-				_GUICtrlRichEdit_SetReadOnly($InputLyrics, False)
-				GUICtrlSetData($InputTitle, '')
-				GUICtrlSetData($InputAuthor, '')
-				GUICtrlSetData($InputCadence, '')
-				JT_RichEditSetText($InputLyrics, '')
-			EndIf
+			JT_Button_New()
 			
 		Case $ButtonEdit
 			If ($UpdateMode <> 2) Then
@@ -385,43 +376,7 @@ While 1
 			EndIf
 			
 		Case $ButtonSave
-			If ($UpdateMode <> 0) Then
-				$tmpData[0] = GUICtrlRead($InputTitle)
-				$tmpData[1] = GUICtrlRead($InputAuthor)
-				$tmpData[2] = GUICtrlRead($InputCadence)
-				$tmpData[3] = _GUICtrlRichEdit_GetText($InputLyrics)
-				$tmpString = ''
-				If ($UpdateMode == 1) Then
-					$tmpString = JT_AddSong($tmpData, GUICtrlRead($CurrentTreeItem, 1))
-				Else
-					$tmpString = JT_AddSong($tmpData)
-				EndIf
-				
-				GUICtrlSetData($InputTitle, $tmpData[0])
-				GUICtrlSetData($InputAuthor, $tmpData[1])
-				GUICtrlSetData($InputCadence, $tmpData[2])
-				JT_RichEditSetText($InputLyrics, $tmpData[3])
-				
-				If ($tmpString == '') Then
-					If ($UpdateMode == 1) Then
-						GUICtrlDelete($CurrentTreeItem)
-					EndIf
-					If (GUICtrlCreateTreeViewItem($tmpData[0], Eval('TreeItem' & StringUpper(_JT_ToLatin(StringLeft($tmpData[0], 1))))) == 0) Then
-						GUICtrlCreateTreeViewItem($tmpData[0], $TreeItemOther)
-					EndIf
-					GUICtrlSetStyle($InputTitle, $ES_READONLY)
-					GUICtrlSetStyle($InputAuthor, $ES_READONLY)
-					GUICtrlSetStyle($InputCadence, $ES_READONLY)
-					_GUICtrlRichEdit_SetReadOnly($InputLyrics, True)
-					ControlTreeView($FormMain, '', $Tree, 'Select', _JT_ToLatin(StringLeft($tmpData[0], 1)) & '|' & $tmpData[0])
-					If (@error) Then ControlTreeView($FormMain, '', $Tree, 'Select', JT_TranSlate('Other') & '|' & $tmpData[0])
-					JT_MessageBox($FormMain, 'Info', 'The song was added/updated successful')
-					$UpdateMode = 0
-					JT_GetDataFromTree(1)
-				Else
-					JT_MessageBox($FormMain, 'Error', $tmpString)
-				EndIf
-			EndIf
+			JT_Button_Save(0)
 			
 		Case Else
 			JT_GetDataFromTree(0)
@@ -437,6 +392,74 @@ While 1
 			JT_RichEditScroll($InputLyrics, GUICtrlRead($CheckboxScroll))
 	EndSwitch
 WEnd
+
+#REGION ### FUNCTIONS BLOCK - BUTTON EVENT ###
+FUNC JT_Button_New()
+	Local $MsgBox_Result = JT_MessageBox($FormMain, 'Confirm', "The song haven't saved yet. Do you want to SAVE it?")
+	
+	If ($MsgBox_Result == 6) Then
+		JT_Button_Save(1)
+	EndIf
+	
+	If ($UpdateMode == 0 Or $MsgBox_Result == 7) Then
+		$UpdateMode = 2
+		GUICtrlSetStyle($InputTitle, $GUI_SS_DEFAULT_INPUT)
+		GUICtrlSetState($InputTitle, $GUI_FOCUS)
+		GUICtrlSetStyle($InputAuthor, $GUI_SS_DEFAULT_INPUT)
+		GUICtrlSetStyle($InputCadence, $GUI_SS_DEFAULT_INPUT)
+		_GUICtrlRichEdit_SetReadOnly($InputLyrics, False)
+		GUICtrlSetData($InputTitle, '')
+		GUICtrlSetData($InputAuthor, '')
+		GUICtrlSetData($InputCadence, '')
+		JT_RichEditSetText($InputLyrics, '')
+	EndIf
+ENDFUNC ; <== JT_Button_New
+
+FUNC JT_Button_Save($silent = 0)
+	If ($UpdateMode <> 0) Then
+		$tmpData[0] = GUICtrlRead($InputTitle)
+		$tmpData[1] = GUICtrlRead($InputAuthor)
+		$tmpData[2] = GUICtrlRead($InputCadence)
+		$tmpData[3] = _GUICtrlRichEdit_GetText($InputLyrics)
+		$errorText = ''
+		
+		If ($UpdateMode == 1) Then
+			$errorText = JT_AddSong($tmpData, GUICtrlRead($CurrentTreeItem, 1))
+		Else
+			$errorText = JT_AddSong($tmpData)
+		EndIf
+		
+		GUICtrlSetData($InputTitle, $tmpData[0])
+		GUICtrlSetData($InputAuthor, $tmpData[1])
+		GUICtrlSetData($InputCadence, $tmpData[2])
+		JT_RichEditSetText($InputLyrics, $tmpData[3])
+		
+		If ($errorText == '') Then
+			If ($UpdateMode == 1) Then
+				GUICtrlDelete($CurrentTreeItem)
+			EndIf
+			If (GUICtrlCreateTreeViewItem($tmpData[0], Eval('TreeItem' & StringUpper(_JT_ToLatin(StringLeft($tmpData[0], 1))))) == 0) Then
+				GUICtrlCreateTreeViewItem($tmpData[0], $TreeItemOther)
+			EndIf
+			GUICtrlSetStyle($InputTitle, $ES_READONLY)
+			GUICtrlSetStyle($InputAuthor, $ES_READONLY)
+			GUICtrlSetStyle($InputCadence, $ES_READONLY)
+			_GUICtrlRichEdit_SetReadOnly($InputLyrics, True)
+			If ($silent == 0) Then
+				JT_MessageBox($FormMain, 'Info', 'The song was added/updated successful')
+				ControlTreeView($FormMain, '', $Tree, 'Select', _JT_ToLatin(StringLeft($tmpData[0], 1)) & '|' & $tmpData[0])
+				If (@error) Then
+					ControlTreeView($FormMain, '', $Tree, 'Select', JT_TranSlate('Other') & '|' & $tmpData[0])
+				EndIf
+			EndIf
+			$UpdateMode = 0
+			JT_GetDataFromTree(1)
+		Else
+			JT_MessageBox($FormMain, 'Error', $errorText)
+		EndIf
+	EndIf
+ENDFUNC ; <== JT_Button_Save
+#ENDREGION ; <== FILE INSTALL
 
 #REGION ### FUNCTIONS BLOCK - CHANGE APPEARANCE ###
 FUNC JT_SetMainFormText($lang = 'English', $force = 0)
@@ -885,10 +908,16 @@ ENDFUNC ; <== JT_BuildTree
 FUNC JT_GetDataFromTree($force = 0)
 	If ($CurrentTreeItem <> GUICtrlRead($Tree) Or $force == 1) Then
 		If ($UpdateMode <> 0) Then
-			If (JT_MessageBox($FormMain, 'Confirm', "The song haven't saved yet. Do you want to leave it?") == 6) Then
-				$UpdateMode = 0
+			Local $MsgBox_Result = JT_MessageBox($FormMain, 'Confirm', "The song haven't saved yet. Do you want to SAVE it?")
+			
+			If ($MsgBox_Result == 6) Then
+				JT_Button_Save(1)
 			Else
-				GUICtrlSetState($CurrentTreeItem, $GUI_FOCUS)
+				If ($MsgBox_Result == 7) Then
+					$UpdateMode = 0
+				Else
+					GUICtrlSetState($CurrentTreeItem, $GUI_FOCUS)
+				EndIf
 			EndIf
 		Else
 			$CurrentTreeItem = GUICtrlRead($Tree)
@@ -1924,9 +1953,9 @@ FUNC JT_About()
 			Case $HelpLabel
 				Run('notepad.exe "' & $HelpFile & '"')
 			Case $HomepageLabel
-				Run('cmd.exe /c start "" "https://github.com/o0johntam0o/JT-Songbooks/"')
+				Run('cmd.exe /c start "" ' & $SourceCodeUrl)
 			Case $SourceLabel
-				Run('cmd.exe /c start "" "https://github.com/o0johntam0o/JT-Songbooks/"')
+				Run('cmd.exe /c start "" ' & $SourceCodeUrl)
 		EndSwitch
 	WEnd
 	GUISetState(@SW_ENABLE, $FormMain)
