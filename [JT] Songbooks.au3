@@ -46,10 +46,10 @@ Global CONST $HelpFile = @ScriptDir & '\Help.txt'
 Global CONST $ConfigFile = @ScriptDir & '\Settings.ini'
 Global CONST $ChordMapFile = @ScriptDir & '\ChordMap.ini'
 Global CONST $LanguageDir = @ScriptDir & '\Languages'
+Global CONST $FavoriteColor = 0XFFB3DE
 Global $CurrentLanguage = IniRead($ConfigFile, 'Common', 'CustomLanguage', 'English')
 Global $CurrentScreen = IniRead($ConfigFile, 'Common', 'Screen', 1024)
-Global $CurrentSongInfo[4] = ['', '', '', '']
-Global $tmpData[4] = ['', '', '', '']
+Global $CurrentSongInfo[5] = ['', '', '', '', False]
 Global $tmpString = ''
 Global $errorText = ''
 Global $tmpInt = 0
@@ -68,6 +68,7 @@ Global CONST $SongDB_ColTitle = 'Title'
 Global CONST $SongDB_ColAuthor = 'Author'
 Global CONST $SongDB_ColCadence = 'Cadence'
 Global CONST $SongDB_ColLyrics = 'Lyrics'
+Global CONST $SongDB_ColFavorite = 'Favorite'
 #ENDREGION ; <== SOME GLOBAL VARIABLES
 
 #REGION ### FILE INSTALL ###
@@ -98,6 +99,8 @@ GUISetHelp('notepad.exe "' & $HelpFile & '"', $FormMain)
 ; BEGIN - TREE
 Global $Tree = GUICtrlCreateTreeView(0, 0)
 GUICtrlSetStyle(-1, BitOR($TVS_HASBUTTONS, $TVS_HASLINES, $TVS_LINESATROOT, $TVS_DISABLEDRAGDROP, $TVS_SHOWSELALWAYS), $WS_EX_CLIENTEDGE)
+Global $TreeItemFavorite = GUICtrlCreateTreeViewItem('', $Tree)
+GUICtrlSetColor(-1, 0x0000C0)
 For $i = 65 To 90
 	Assign('TreeItem' & Chr($i), GUICtrlCreateTreeViewItem(Chr($i), $Tree), 2)
 	GUICtrlSetColor(-1, 0x0000C0)
@@ -122,7 +125,7 @@ GUICtrlSetStyle(-1, BitOr($ES_READONLY, $ES_AUTOHSCROLL))
 Global $LabelCadence = GUICtrlCreateLabel('', 0, 0)
 Global $InputCadence = GUICtrlCreateInput('', 0, 0)
 GUICtrlSetStyle(-1, BitOr($ES_READONLY, $ES_AUTOHSCROLL))
-
+Global $InputFavorite = False ; Hidden
 Global $ButtonNew = GUICtrlCreateButton('', 0, 0)
 Global $ButtonEdit = GUICtrlCreateButton('', 0, 0)
 Global $ButtonSave = GUICtrlCreateButton('', 0, 0)
@@ -203,6 +206,7 @@ Global $InputScroll = GUICtrlCreateInput('2', 0, 0)
 GUICtrlSetStyle(-1, BitOR($ES_CENTER, $ES_NUMBER))
 GUICtrlCreateUpdown(-1)
 GUICtrlSetLimit(-1, 50, 0)
+Global $ButtonFavorite = GUICtrlCreateButton('', 0, 0)
 Global $CheckboxOntop = GUICtrlCreateCheckbox('', 0, 0)
 
 #ENDREGION ; <== MAKE MAIN FORM
@@ -347,9 +351,37 @@ While 1
 			JT_About()
 			
 		Case $ButtonCollapse
-			For $i = 0 To 26
+			For $i = 0 To 27
 				ControlTreeView($FormMain, '', $Tree, 'Collapse', '#' & $i)
 			Next
+			
+		Case $ButtonFavorite
+			If (StringInStr(ControlTreeView($FormMain, '', $Tree, 'GetSelected', 1), '|') <> 0 And $UpdateMode == 0) Then
+				If ($CurrentSongInfo[4] == False) Then
+					If (JT_MarkSong(GUICtrlRead($CurrentTreeItem, 1)) == 1) Then
+						GUICtrlDelete($CurrentTreeItem)
+						GUICtrlCreateTreeViewItem($CurrentSongInfo[0], $TreeItemFavorite)
+						ControlTreeView($FormMain, '', $Tree, 'Select', '#0|' & $CurrentSongInfo[0])
+						JT_GetDataFromTree(1)
+					Else
+						JT_MessageBox($FormMain, 'Error', 'Error')
+					EndIf
+				Else
+					If (JT_UnMarkSong(GUICtrlRead($CurrentTreeItem, 1)) == 1) Then
+						GUICtrlDelete($CurrentTreeItem)
+						If (GUICtrlCreateTreeViewItem($CurrentSongInfo[0], Eval('TreeItem' & StringUpper(_JT_ToLatin(StringLeft($CurrentSongInfo[0], 1))))) == 0) Then
+							GUICtrlCreateTreeViewItem($CurrentSongInfo[0], $TreeItemOther)
+						EndIf
+						ControlTreeView($FormMain, '', $Tree, 'Select', _JT_ToLatin(StringLeft($CurrentSongInfo[0], 1)) & '|' & $CurrentSongInfo[0])
+						If (@error) Then
+							ControlTreeView($FormMain, '', $Tree, 'Select', '#27|' & $CurrentSongInfo[0])
+						EndIf
+						JT_GetDataFromTree(1)
+					Else
+						JT_MessageBox($FormMain, 'Error', 'Error')
+					EndIf
+				EndIf
+			EndIf
 			
 		Case $ButtonDelete
 			If (StringInStr(ControlTreeView($FormMain, '', $Tree, 'GetSelected', 1), '|') <> 0) Then
@@ -395,10 +427,13 @@ WEnd
 
 #REGION ### FUNCTIONS BLOCK - BUTTON EVENT ###
 FUNC JT_Button_New()
-	Local $MsgBox_Result = JT_MessageBox($FormMain, 'Confirm', "The song haven't saved yet. Do you want to SAVE it?")
+	Local $MsgBox_Result = 0
 	
-	If ($MsgBox_Result == 6) Then
-		JT_Button_Save(1)
+	If ($UpdateMode <> 0) Then
+		$MsgBox_Result = JT_MessageBox($FormMain, 'Confirm', "The song haven't saved yet. Do you want to SAVE it?")
+		If ($MsgBox_Result == 6) Then
+			JT_Button_Save(1)
+		EndIf
 	EndIf
 	
 	If ($UpdateMode == 0 Or $MsgBox_Result == 7) Then
@@ -412,15 +447,19 @@ FUNC JT_Button_New()
 		GUICtrlSetData($InputAuthor, '')
 		GUICtrlSetData($InputCadence, '')
 		JT_RichEditSetText($InputLyrics, '')
+		$InputFavorite = False
 	EndIf
 ENDFUNC ; <== JT_Button_New
 
 FUNC JT_Button_Save($silent = 0)
+	Local $tmpData[5] = ['', '', '', '', False]
+	
 	If ($UpdateMode <> 0) Then
 		$tmpData[0] = GUICtrlRead($InputTitle)
 		$tmpData[1] = GUICtrlRead($InputAuthor)
 		$tmpData[2] = GUICtrlRead($InputCadence)
 		$tmpData[3] = _GUICtrlRichEdit_GetText($InputLyrics)
+		$tmpData[4] = $InputFavorite
 		$errorText = ''
 		
 		If ($UpdateMode == 1) Then
@@ -433,13 +472,18 @@ FUNC JT_Button_Save($silent = 0)
 		GUICtrlSetData($InputAuthor, $tmpData[1])
 		GUICtrlSetData($InputCadence, $tmpData[2])
 		JT_RichEditSetText($InputLyrics, $tmpData[3])
+		;$InputFavorite = $tmpData[4]
 		
 		If ($errorText == '') Then
 			If ($UpdateMode == 1) Then
 				GUICtrlDelete($CurrentTreeItem)
 			EndIf
-			If (GUICtrlCreateTreeViewItem($tmpData[0], Eval('TreeItem' & StringUpper(_JT_ToLatin(StringLeft($tmpData[0], 1))))) == 0) Then
-				GUICtrlCreateTreeViewItem($tmpData[0], $TreeItemOther)
+			If ($InputFavorite == False) Then
+				If (GUICtrlCreateTreeViewItem($tmpData[0], Eval('TreeItem' & StringUpper(_JT_ToLatin(StringLeft($tmpData[0], 1))))) == 0) Then
+					GUICtrlCreateTreeViewItem($tmpData[0], $TreeItemOther)
+				EndIf
+			Else
+				GUICtrlCreateTreeViewItem($tmpData[0], $TreeItemFavorite)
 			EndIf
 			GUICtrlSetStyle($InputTitle, $ES_READONLY)
 			GUICtrlSetStyle($InputAuthor, $ES_READONLY)
@@ -447,9 +491,13 @@ FUNC JT_Button_Save($silent = 0)
 			_GUICtrlRichEdit_SetReadOnly($InputLyrics, True)
 			If ($silent == 0) Then
 				JT_MessageBox($FormMain, 'Info', 'The song was added/updated successful')
-				ControlTreeView($FormMain, '', $Tree, 'Select', _JT_ToLatin(StringLeft($tmpData[0], 1)) & '|' & $tmpData[0])
-				If (@error) Then
-					ControlTreeView($FormMain, '', $Tree, 'Select', JT_TranSlate('Other') & '|' & $tmpData[0])
+				If ($InputFavorite == False) Then
+					ControlTreeView($FormMain, '', $Tree, 'Select', _JT_ToLatin(StringLeft($tmpData[0], 1)) & '|' & $tmpData[0])
+					If (@error) Then
+						ControlTreeView($FormMain, '', $Tree, 'Select', '#27|' & $tmpData[0])
+					EndIf
+				Else
+					ControlTreeView($FormMain, '', $Tree, 'Select', '#0|' & $tmpData[0])
 				EndIf
 			EndIf
 			$UpdateMode = 0
@@ -464,6 +512,7 @@ ENDFUNC ; <== JT_Button_Save
 #REGION ### FUNCTIONS BLOCK - CHANGE APPEARANCE ###
 FUNC JT_SetMainFormText($lang = 'English', $force = 0)
 	If ($lang <> $CurrentLanguage Or $force == 1) Then
+		GuiCtrlSetData($TreeItemFavorite, JT_TranSlate('Favorite'))
 		GuiCtrlSetData($TreeItemOther, JT_TranSlate('Other'))
 		
 		GuiCtrlSetData($Tab1, JT_TranSlate('View'))
@@ -479,6 +528,8 @@ FUNC JT_SetMainFormText($lang = 'English', $force = 0)
 		GuiCtrlSetTip($InputSearch, JT_TranSlate('Enter keywords'))
 		GuiCtrlSetData($CheckboxScroll, JT_TranSlate('Scroll'))
 		GuiCtrlSetTip($InputScroll, JT_TranSlate('Scroll speed'))
+		GuiCtrlSetData($ButtonFavorite, JT_TranSlate('Favorite'))
+		GuiCtrlSetTip($ButtonFavorite, JT_TranSlate('Mark this song as a favorite'))
 		GuiCtrlSetData($CheckboxOntop, JT_TranSlate('Ontop'))
 
 		GuiCtrlSetData($ButtonNew, JT_TranSlate('New'))
@@ -530,6 +581,7 @@ FUNC JT_SetMainFormSize($opt = 1024, $force = 0)
 		GuiCtrlSetPos($InputSearch, 360, 675, 125, 20)
 		GuiCtrlSetPos($CheckboxScroll, 500, 675, 60, 20)
 		GuiCtrlSetPos($InputScroll, 565, 675, 45, 20)
+		GuiCtrlSetPos($ButtonFavorite, 620, 675, 80, 20)
 		GuiCtrlSetPos($CheckboxOntop, 915, 675, 80, 20)
 
 		GuiCtrlSetPos($LabelChord, 295, 35, 60, 20)
@@ -603,7 +655,8 @@ FUNC JT_SetMainFormSize($opt = 1024, $force = 0)
 			GuiCtrlSetPos($InputSearch, 280, 525, 100, 20)
 			GuiCtrlSetPos($CheckboxScroll, 395, 525, 60, 20)
 			GuiCtrlSetPos($InputScroll, 460, 525, 45, 20)
-			GuiCtrlSetPos($CheckboxOntop, 705, 525, 80, 15)
+			GuiCtrlSetPos($ButtonFavorite, 515, 525, 80, 20)
+			GuiCtrlSetPos($CheckboxOntop, 705, 525, 80, 20)
 
 			GuiCtrlSetPos($LabelChord, 205, 35, 60, 20)
 			GuiCtrlSetPos($ButtonChordBold, 265, 35, 20, 20)
@@ -815,6 +868,7 @@ FUNC JT_INIT()
 					$SongDB_ColAuthor & ' Text, ' & _
 					$SongDB_ColCadence & ' Text, ' & _
 					$SongDB_ColLyrics & ' Memo, ' & _
+					$SongDB_ColFavorite & ' Boolean, ' & _
 					'PRIMARY KEY (ID))')
 		Local $Init[4] = ['[JT] Songbooks', 'o0johntam0o', '4/4', 'Initial']
 		JT_AddSong($Init)
@@ -833,6 +887,7 @@ FUNC JT_AddSong(ByRef $data, $oldData = '')
 	$data[1] = StringReplace(StringStripWS($data[1], 7), '"', "'")
 	$data[2] = StringReplace(StringStripWS($data[2], 7), '"', "'")
 	$data[3] = StringReplace(StringStripWS($data[3], 3), '"', "'")
+	;$data[4] = $data[4]
 	
 	If (StringLen($data[0]) == 0) Then Return JT_TranSlate('Missing title')
 	If (StringLen($data[1]) == 0) Then $data[1] = JT_TranSlate('Unknown')
@@ -878,16 +933,38 @@ FUNC JT_DelSong($data)
 	Return 1
 ENDFUNC ; <== JT_DelSong
 
+FUNC JT_MarkSong($data)
+	Local $SongDB = $DB_Object.OpenDatabase($DB_Location, 0, 0)
+	$SongDB.Execute('UPDATE ' & $SongDB_Table & ' SET ' & _
+						$SongDB_ColFavorite & ' = 1' & _
+						' WHERE ' & $SongDB_ColTitle & ' = "' & $data & '"')
+	$SongDB.Close
+	Return 1
+ENDFUNC ; <== JT_MarkSong
+
+FUNC JT_UnMarkSong($data)
+	Local $SongDB = $DB_Object.OpenDatabase($DB_Location, 0, 0)
+	$SongDB.Execute('UPDATE ' & $SongDB_Table & ' SET ' & _
+						$SongDB_ColFavorite & ' = 0' & _
+						' WHERE ' & $SongDB_ColTitle & ' = "' & $data & '"')
+	$SongDB.Close
+	Return 1
+ENDFUNC ; <== JT_UnMarkSong
+
 FUNC JT_BuildTree($rebuild = 0)
-	Local $i, $SongLists = _JT_GetRecordLists($DB_Object, $DB_Location, $SongDB_Table, $SongDB_ColTitle, 0)
+	Local $i, $SongList = _JT_GetRecordLists($DB_Object, $DB_Location, $SongDB_Table, $SongDB_ColTitle, 0, $SongDB_ColFavorite & '=False')
+	Local $FavoriteList = _JT_GetRecordLists($DB_Object, $DB_Location, $SongDB_Table, $SongDB_ColTitle, 0, $SongDB_ColFavorite & '=True ORDER BY ' & $SongDB_ColTitle)
 	
 	If ($rebuild == 1) Then
 		; Remove old items
+		GUICtrlDelete($TreeItemFavorite)
 		For $i = 65 To 90
 			GUICtrlDelete(Eval('TreeItem' & Chr($i)))
 		Next
 		GUICtrlDelete($TreeItemOther)
 		; Add new items
+		$TreeItemFavorite = GUICtrlCreateTreeViewItem(JT_TranSlate('Favorite'), $Tree)
+		GUICtrlSetColor(-1, 0x0000C0)
 		For $i = 65 To 90
 			Assign('TreeItem' & Chr($i), GUICtrlCreateTreeViewItem(Chr($i), $Tree), 2)
 			GUICtrlSetColor(-1, 0x0000C0)
@@ -896,10 +973,16 @@ FUNC JT_BuildTree($rebuild = 0)
 		GUICtrlSetColor(-1, 0x0000C0)
 	EndIf
 
-	If (IsArray($SongLists)) Then
-		For $i = 0 To UBound($SongLists) - 1
-			If (GUICtrlCreateTreeViewItem($SongLists[$i], Eval('TreeItem' & StringUpper(_JT_ToLatin(StringLeft(StringStripWS($SongLists[$i], 7), 1))))) == 0) Then
-				GUICtrlCreateTreeViewItem($SongLists[$i], $TreeItemOther)
+	If (IsArray($FavoriteList)) Then
+		For $i = 0 To UBound($FavoriteList) - 1
+			GUICtrlCreateTreeViewItem($FavoriteList[$i], $TreeItemFavorite)
+		Next
+	EndIf
+	
+	If (IsArray($SongList)) Then
+		For $i = 0 To UBound($SongList) - 1
+			If (GUICtrlCreateTreeViewItem($SongList[$i], Eval('TreeItem' & StringUpper(_JT_ToLatin(StringLeft(StringStripWS($SongList[$i], 7), 1))))) == 0) Then
+				GUICtrlCreateTreeViewItem($SongList[$i], $TreeItemOther)
 			EndIf
 		Next
 	EndIf
@@ -929,6 +1012,12 @@ FUNC JT_GetDataFromTree($force = 0)
 				GUICtrlSetData($InputAuthor, $CurrentSongInfo[1])
 				GUICtrlSetData($InputCadence, $CurrentSongInfo[2])
 				JT_RichEditSetText($InputLyrics, $CurrentSongInfo[3])
+				$InputFavorite = $CurrentSongInfo[4]
+				If ($CurrentSongInfo[4] == True) Then
+					GUICtrlSetBkColor($ButtonFavorite, $FavoriteColor)
+				Else
+					GUICtrlSetStyle($ButtonFavorite, $GUI_SS_DEFAULT_BUTTON)
+				EndIf
 
 				; Load settings
 				$tmpString = ''
@@ -1115,7 +1204,7 @@ FUNC JT_ExportLIB_TXT($_Path)
 ENDFUNC ; <== JT_ExportLIB_TXT
 
 FUNC JT_GetSongInfo($dbFilter)
-	Local $Re[4] = ['', '', '', ''], $Title, $Author, $Cadence, $Lyrics
+	Local $Re[5] = ['', '', '', '', False]
 	Local $SongDB = $DB_Object.OpenDatabase($DB_Location, 0, 1)
 	Local $RecordPointer = $SongDB.OpenRecordSet('SELECT * FROM ' & $SongDB_Table & ' WHERE ' & $SongDB_ColTitle & ' = "' & $dbFilter & '"')
 	
@@ -1125,6 +1214,7 @@ FUNC JT_GetSongInfo($dbFilter)
 		$Re[1] = StringStripWS($RecordPointer.Fields(2).Value, 7)
 		$Re[2] = StringStripWS($RecordPointer.Fields(3).Value, 7)
 		$Re[3] = StringStripWS($RecordPointer.Fields(4).Value, 3)
+		$Re[4] = $RecordPointer.Fields(5).Value
 	EndIf
 	
 	$SongDB.Close
@@ -1172,10 +1262,10 @@ ENDFUNC ; <== JT_GetTemplate
 FUNC JT_SearchSong($keywords)
 	If ($keywords == '' Or StringLen(StringStripWS($keywords, 8)) < 4) Then Return
 	Local $Search = StringUpper(_JT_ToLatin(StringStripWS($keywords, 8)))
-	Local $Node = '#26', $NodeCount, $i, $a, $b
+	Local $Node = '#27', $NodeCount, $i, $a, $b
 	
 	If (Asc(StringLeft($Search, 1)) >= 65 And Asc(StringLeft($Search, 1)) <= 90) Then
-		$Node = '#' & (Asc(StringLeft($Search, 1)) - 65)
+		$Node = '#' & (Asc(StringLeft($Search, 1)) - 64)
 	EndIf
 	
 	$NodeCount = ControlTreeView($FormMain, '', $Tree, 'GetItemCount', $Node)
@@ -1532,7 +1622,7 @@ FUNC JT_Update()
 	
 	Local $UpdateData = '', $hDownload, $Mode
 	Local $GUIMessage
-	Local $Song[4] = ['', '', '', '']
+	Local $Song[5] = ['', '', '', '', False]
 	Local $error = 0, $skip = 0, $new = 0, $overWrite = 0
 	
 	While 1
@@ -1598,6 +1688,7 @@ FUNC JT_Update()
 								$Song[1] = StringReplace(StringStripWS($Record_New.Fields(2).Value, 7), '"', "'")
 								$Song[2] = StringReplace(StringStripWS($Record_New.Fields(3).Value, 7), '"', "'")
 								$Song[3] = StringAddCR(StringStripCR(StringReplace(StringStripWS($Record_New.Fields(4).Value, 3), '"', "'")))
+								$Song[4] = $Record_New.Fields(5).Value
 								
 								If (StringLen($Song[2]) > 5) Then $Song[2] = '0/0'
 								

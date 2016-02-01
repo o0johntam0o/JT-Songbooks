@@ -3,32 +3,31 @@
 ; $dbTable => Table name
 ; $dbCol   => Column name (put to list)
 ; $reCount => 0 (No), 1 (Yes)
+; $dbCond   => Condition (WHERE <Condition>)
 ; Return   => List of records (Array) or Number of records
-FUNC _JT_GetRecordLists($dbObj, $dbPath, $dbTable, $dbCol, $reCount = 0)
+FUNC _JT_GetRecordLists($dbObj, $dbPath, $dbTable, $dbCol, $reCount = 0, $dbCond = '')
 	Local $DbOpen = $dbObj.OpenDatabase($dbPath, 0, 1)
-	Local $RecordPointer = $DbOpen.OpenRecordSet($dbTable)
+	Local $RecordPointer
 	
+	If ($dbCond <> '') Then $dbCond = ' WHERE ' & $dbCond
+	$RecordPointer = $DbOpen.OpenRecordSet('SELECT ' & $dbCol & ' FROM ' & $dbTable & $dbCond)
 	If ($RecordPointer.EOF <> -1 Or $RecordPointer.BOF <> -1) Then
-		$RecordPointer.MoveFirst
+		$RecordPointer.MoveLast
 	Else
 		$DbOpen.Close
 		Return 0
 	EndIf
-	$tmpInt = $RecordPointer.RecordCount
+	
+	Local $tmpInt = $RecordPointer.RecordCount
 	
 	If ($reCount == 1) Then
 		$DbOpen.Close
 		Return $tmpInt
+	Else
+		$RecordPointer.MoveFirst
 	EndIf
 	
 	Local $Re[$tmpInt], $i = 0
-	$RecordPointer = $DbOpen.OpenRecordSet('SELECT ' & $dbCol & ' FROM ' & $dbTable)
-	If ($RecordPointer.EOF <> -1 Or $RecordPointer.BOF <> -1) Then
-		$RecordPointer.MoveFirst
-	Else
-		$DbOpen.Close
-		Return 0
-	EndIf
 	
 	For $i = 0 To $tmpInt - 1
 		If ($RecordPointer.EOF <> -1 Or $RecordPointer.BOF <> -1) Then
