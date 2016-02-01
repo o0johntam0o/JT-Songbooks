@@ -60,6 +60,29 @@ FUNC _JT_CheckRecord($dbObj, $dbPath, $dbTable, $dbCol, $dbFilter)
 	EndIf
 ENDFUNC ; <== _JT_CheckRecord
 
+; $dbObj    => ObjCreate('DAO.DBEngine.36')
+; $dbPath   => Fullpath to *.mdb
+; $dbTable  => Table name
+; $dbFilter => A string (to search for)
+; Return    => 0 (No - Field not found), 1 (Yes - Field exists)
+FUNC _JT_CheckField($dbObj, $dbPath, $dbTable, $dbFilter)
+	Local $DbOpen = $dbObj.OpenDatabase($dbPath, 0, 1)
+	Local $RecordPointer = $DbOpen.OpenRecordSet($dbTable)
+	Local $i
+	
+	If ($RecordPointer.Fields.Count > 0) Then
+		For $i = 0 To $RecordPointer.Fields.Count - 1
+			If $RecordPointer.Fields($i).Name = $dbFilter Then
+				$DbOpen.Close
+				Return 1
+			EndIf
+		Next
+	EndIf
+	
+	$DbOpen.Close
+	Return 0
+ENDFUNC ; <== _JT_CheckField
+
 ; $array => An array of strings
 ; Return => Sorted array
 FUNC _JT_ArraySortString($array)

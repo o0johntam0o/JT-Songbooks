@@ -49,7 +49,7 @@ Global CONST $LanguageDir = @ScriptDir & '\Languages'
 Global CONST $FavoriteColor = 0XFFB3DE
 Global $CurrentLanguage = IniRead($ConfigFile, 'Common', 'CustomLanguage', 'English')
 Global $CurrentScreen = IniRead($ConfigFile, 'Common', 'Screen', 1024)
-Global $CurrentSongInfo[5] = ['', '', '', '', False]
+Global $CurrentSongInfo[5] = ['', '', '', '', 0]
 Global $tmpString = ''
 Global $errorText = ''
 Global $tmpInt = 0
@@ -125,7 +125,7 @@ GUICtrlSetStyle(-1, BitOr($ES_READONLY, $ES_AUTOHSCROLL))
 Global $LabelCadence = GUICtrlCreateLabel('', 0, 0)
 Global $InputCadence = GUICtrlCreateInput('', 0, 0)
 GUICtrlSetStyle(-1, BitOr($ES_READONLY, $ES_AUTOHSCROLL))
-Global $InputFavorite = False ; Hidden
+Global $InputFavorite = 0 ; Hidden
 Global $ButtonNew = GUICtrlCreateButton('', 0, 0)
 Global $ButtonEdit = GUICtrlCreateButton('', 0, 0)
 Global $ButtonSave = GUICtrlCreateButton('', 0, 0)
@@ -357,7 +357,7 @@ While 1
 			
 		Case $ButtonFavorite
 			If (StringInStr(ControlTreeView($FormMain, '', $Tree, 'GetSelected', 1), '|') <> 0 And $UpdateMode == 0) Then
-				If ($CurrentSongInfo[4] == False) Then
+				If ($CurrentSongInfo[4] == 0) Then
 					If (JT_MarkSong(GUICtrlRead($CurrentTreeItem, 1)) == 1) Then
 						GUICtrlDelete($CurrentTreeItem)
 						GUICtrlCreateTreeViewItem($CurrentSongInfo[0], $TreeItemFavorite)
@@ -447,12 +447,12 @@ FUNC JT_Button_New()
 		GUICtrlSetData($InputAuthor, '')
 		GUICtrlSetData($InputCadence, '')
 		JT_RichEditSetText($InputLyrics, '')
-		$InputFavorite = False
+		$InputFavorite = 0
 	EndIf
 ENDFUNC ; <== JT_Button_New
 
 FUNC JT_Button_Save($silent = 0)
-	Local $tmpData[5] = ['', '', '', '', False]
+	Local $tmpData[5] = ['', '', '', '', 0]
 	
 	If ($UpdateMode <> 0) Then
 		$tmpData[0] = GUICtrlRead($InputTitle)
@@ -478,7 +478,7 @@ FUNC JT_Button_Save($silent = 0)
 			If ($UpdateMode == 1) Then
 				GUICtrlDelete($CurrentTreeItem)
 			EndIf
-			If ($InputFavorite == False) Then
+			If ($InputFavorite == 0) Then
 				If (GUICtrlCreateTreeViewItem($tmpData[0], Eval('TreeItem' & StringUpper(_JT_ToLatin(StringLeft($tmpData[0], 1))))) == 0) Then
 					GUICtrlCreateTreeViewItem($tmpData[0], $TreeItemOther)
 				EndIf
@@ -491,7 +491,7 @@ FUNC JT_Button_Save($silent = 0)
 			_GUICtrlRichEdit_SetReadOnly($InputLyrics, True)
 			If ($silent == 0) Then
 				JT_MessageBox($FormMain, 'Info', 'The song was added/updated successful')
-				If ($InputFavorite == False) Then
+				If ($InputFavorite == 0) Then
 					ControlTreeView($FormMain, '', $Tree, 'Select', _JT_ToLatin(StringLeft($tmpData[0], 1)) & '|' & $tmpData[0])
 					If (@error) Then
 						ControlTreeView($FormMain, '', $Tree, 'Select', '#27|' & $tmpData[0])
@@ -859,21 +859,31 @@ ENDFUNC ; <== JT_RichEditSetStyle
 
 #REGION ### FUNCTIONS BLOCK ###
 FUNC JT_INIT()
+	Local $DB_Object = ObjCreate('DAO.DBEngine.36')
+	Local $SongDB
+	Local $Init[5] = ['[JT] Songbooks', 'o0johntam0o', '4/4', 'Initial', 0]
+	
 	If (Not FileExists($DB_Location)) Then
-		Local $DB_Object = ObjCreate('DAO.DBEngine.36')
 		$DB_Object.CreateDatabase($DB_Location, ';LANGID=0x0409;CP=1252;COUNTRY=0')
-		Local $SongDB = $DB_Object.OpenDatabase($DB_Location, 0, 0)
+		$SongDB = $DB_Object.OpenDatabase($DB_Location, 0, 0)
 		$SongDB.Execute('CREATE TABLE ' & $SongDB_Table & ' (ID AUTOINCREMENT, ' & _
 					$SongDB_ColTitle & ' Text, ' & _
 					$SongDB_ColAuthor & ' Text, ' & _
 					$SongDB_ColCadence & ' Text, ' & _
 					$SongDB_ColLyrics & ' Memo, ' & _
-					$SongDB_ColFavorite & ' Boolean, ' & _
+					$SongDB_ColFavorite & ' Byte, ' & _
 					'PRIMARY KEY (ID))')
-		Local $Init[4] = ['[JT] Songbooks', 'o0johntam0o', '4/4', 'Initial']
 		JT_AddSong($Init)
 		$SongDB.Close
 		Sleep(1000)
+	Else
+		; Check old database from v2.0.0
+		If (_JT_CheckField($DB_Object, $DB_Location, $SongDB_Table, $SongDB_ColFavorite) == 0) Then
+			$SongDB = $DB_Object.OpenDatabase($DB_Location, 0, 0)
+			$SongDB.Execute('ALTER TABLE ' & $SongDB_Table & _
+							' ADD ' & $SongDB_ColFavorite & ' Byte')
+			$SongDB.Close
+		EndIf
 	EndIf
 ENDFUNC ; <== JT_INIT
 
@@ -905,8 +915,8 @@ FUNC JT_AddSong(ByRef $data, $oldData = '')
 			;$data[0] = $data[0] & ' - ' & $data[1] & ' (' & Random() & ')'
 		EndIf
 		$SongDB.Execute('INSERT INTO ' & $SongDB_Table & ' (' & _
-			$SongDB_ColTitle & ', ' & $SongDB_ColAuthor & ', ' & $SongDB_ColCadence & ', ' & $SongDB_ColLyrics & _
-			') VALUES ("' & $data[0] & '", "' & $data[1] & '", "' & $data[2] & '", "' & $data[3] & '")')
+			$SongDB_ColTitle & ', ' & $SongDB_ColAuthor & ', ' & $SongDB_ColCadence & ', ' & $SongDB_ColLyrics & ', ' & $SongDB_ColFavorite & _
+			') VALUES ("' & $data[0] & '", "' & $data[1] & '", "' & $data[2] & '", "' & $data[3] & '", ' & $data[4] &  ')')
 	Else
 		If ($data[0] <> $oldData And ($RecordPointer.EOF <> -1 Or $RecordPointer.BOF <> -1)) Then
 			$SongDB.Close
@@ -917,8 +927,9 @@ FUNC JT_AddSong(ByRef $data, $oldData = '')
 						$SongDB_ColTitle & ' = "' & $data[0] & '", ' & _
 						$SongDB_ColAuthor & ' = "' & $data[1] & '", ' & _
 						$SongDB_ColCadence & ' = "' & $data[2] & '", ' & _
-						$SongDB_ColLyrics & ' = "' & $data[3] & _
-						'" WHERE ' & $SongDB_ColTitle & ' = "' & $oldData & '"')
+						$SongDB_ColLyrics & ' = "' & $data[3] & '", ' & _
+						$SongDB_ColFavorite & ' = ' & $data[4] & _
+						' WHERE ' & $SongDB_ColTitle & ' = "' & $oldData & '"')
 	EndIf
 
 	$SongDB.Close
@@ -952,8 +963,8 @@ FUNC JT_UnMarkSong($data)
 ENDFUNC ; <== JT_UnMarkSong
 
 FUNC JT_BuildTree($rebuild = 0)
-	Local $i, $SongList = _JT_GetRecordLists($DB_Object, $DB_Location, $SongDB_Table, $SongDB_ColTitle, 0, $SongDB_ColFavorite & '=False')
-	Local $FavoriteList = _JT_GetRecordLists($DB_Object, $DB_Location, $SongDB_Table, $SongDB_ColTitle, 0, $SongDB_ColFavorite & '=True ORDER BY ' & $SongDB_ColTitle)
+	Local $i, $SongList = _JT_GetRecordLists($DB_Object, $DB_Location, $SongDB_Table, $SongDB_ColTitle, 0, $SongDB_ColFavorite & '=0')
+	Local $FavoriteList = _JT_GetRecordLists($DB_Object, $DB_Location, $SongDB_Table, $SongDB_ColTitle, 0, $SongDB_ColFavorite & '=1 ORDER BY ' & $SongDB_ColTitle)
 	
 	If ($rebuild == 1) Then
 		; Remove old items
@@ -1013,7 +1024,7 @@ FUNC JT_GetDataFromTree($force = 0)
 				GUICtrlSetData($InputCadence, $CurrentSongInfo[2])
 				JT_RichEditSetText($InputLyrics, $CurrentSongInfo[3])
 				$InputFavorite = $CurrentSongInfo[4]
-				If ($CurrentSongInfo[4] == True) Then
+				If ($CurrentSongInfo[4] == 1) Then
 					GUICtrlSetBkColor($ButtonFavorite, $FavoriteColor)
 				Else
 					GUICtrlSetStyle($ButtonFavorite, $GUI_SS_DEFAULT_BUTTON)
@@ -1204,7 +1215,7 @@ FUNC JT_ExportLIB_TXT($_Path)
 ENDFUNC ; <== JT_ExportLIB_TXT
 
 FUNC JT_GetSongInfo($dbFilter)
-	Local $Re[5] = ['', '', '', '', False]
+	Local $Re[5] = ['', '', '', '', 0]
 	Local $SongDB = $DB_Object.OpenDatabase($DB_Location, 0, 1)
 	Local $RecordPointer = $SongDB.OpenRecordSet('SELECT * FROM ' & $SongDB_Table & ' WHERE ' & $SongDB_ColTitle & ' = "' & $dbFilter & '"')
 	
@@ -1622,7 +1633,7 @@ FUNC JT_Update()
 	
 	Local $UpdateData = '', $hDownload, $Mode
 	Local $GUIMessage
-	Local $Song[5] = ['', '', '', '', False]
+	Local $Song[5] = ['', '', '', '', 0]
 	Local $error = 0, $skip = 0, $new = 0, $overWrite = 0
 	
 	While 1
@@ -1687,8 +1698,8 @@ FUNC JT_Update()
 								$Song[0] = StringReplace(StringStripWS($Record_New.Fields(1).Value, 7), '"', "'")
 								$Song[1] = StringReplace(StringStripWS($Record_New.Fields(2).Value, 7), '"', "'")
 								$Song[2] = StringReplace(StringStripWS($Record_New.Fields(3).Value, 7), '"', "'")
-								$Song[3] = StringAddCR(StringStripCR(StringReplace(StringStripWS($Record_New.Fields(4).Value, 3), '"', "'")))
-								$Song[4] = $Record_New.Fields(5).Value
+								$Song[3] = StringAddCR(StringReplace(StringStripWS($Record_New.Fields(4).Value, 3), '"', "'"))
+								;$Song[4] = $Record_New.Fields(5).Value
 								
 								If (StringLen($Song[2]) > 5) Then $Song[2] = '0/0'
 								
@@ -1771,7 +1782,7 @@ FUNC JT_Update()
 													$Song[2] = ''
 												EndIf
 												If (IsArray($Lyrics)) Then
-													$Song[3] = StringAddCR(StringStripCR(StringReplace(StringStripWS($Lyrics[0], 3), '"', "'")))
+													$Song[3] = StringAddCR(StringReplace(StringStripWS($Lyrics[0], 3), '"', "'"))
 												Else
 													$Song[3] = ''
 												EndIf
